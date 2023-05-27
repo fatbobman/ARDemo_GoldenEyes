@@ -45,16 +45,16 @@ struct FullCodeARViewContainer: UIViewRepresentable {
 
     func makeEyesAnchor() throws -> AnchorEntity {
         let eyesAnchor = AnchorEntity()
-        let eyeBallSize: Float = 0.02 // 小球的尺寸
+        let eyeBallSize: Float = 0.015 // 小球的尺寸
         // 创建左眼小球并设置位置
         let leftEyeBall = createEyeBall(scale: eyeBallSize)
-        let leftEyeOffset = SIMD3<Float>(0.03, 0, -0.03) // 左眼相对于头部的偏移量
+        let leftEyeOffset = SIMD3<Float>(0.03, 0.02, 0.05) // 左眼相对于头部的偏移量
         leftEyeBall.name = "leftEye"
         leftEyeBall.position = leftEyeOffset
         eyesAnchor.addChild(leftEyeBall)
         // 创建右眼小球并设置位置
         let rightEyeBall = createEyeBall(scale: eyeBallSize)
-        let rightEyeOffset = SIMD3<Float>(-0.03, 0, -0.03) // 右眼相对于头部的偏移量
+        let rightEyeOffset = SIMD3<Float>(-0.03, 0.02, 0.05) // 右眼相对于头部的偏移量
         rightEyeBall.name = "rightEye"
         rightEyeBall.position = rightEyeOffset
         eyesAnchor.addChild(rightEyeBall)
@@ -77,55 +77,73 @@ class FullCodeARDelegateHandler: NSObject, ARSessionDelegate {
 
     func session(_: ARSession, didUpdate anchors: [ARAnchor]) {
         guard let faceAnchor = anchors.first as? ARFaceAnchor,
-              let face = face else {
+              let face = face
+        else {
             return
         }
-        
+
         // 更新头部实体的位置和方向
         let facePosition = simd_make_float3(faceAnchor.transform.columns.3)
-        let faceOrientation = simd_quatf(faceAnchor.transform).conjugate
+        let faceOrientation = simd_quatf(faceAnchor.transform)
         face.position = facePosition
         face.orientation = faceOrientation
         
+        // 获取头部节点的旋转值
+        let faceRotation = face.orientation
+
+        // 更新左眼小球的旋转
+        if let leftEye = face.children.first(where: { $0.name == "leftEye" }) as? ModelEntity {
+            let parentRotation = faceOrientation
+            let eyeLocalRotation = simd_mul(parentRotation.inverse, faceRotation)
+            leftEye.orientation = eyeLocalRotation
+        }
+
+        // 更新右眼小球的旋转
+        if let rightEye = face.children.first(where: { $0.name == "rightEye" }) as? ModelEntity {
+            let parentRotation = faceOrientation
+            let eyeLocalRotation = simd_mul(parentRotation.inverse, faceRotation)
+            rightEye.orientation = eyeLocalRotation
+        }
+        
+
         print("Face Position and Orientation:", facePosition, faceOrientation)
-        
-        let maxScale: Float = 2 // 小球的最大缩放倍数
-        
+
+        let maxScale: Float = 1.6 // 小球的最大缩放倍数
+
         // 获取张嘴程度
         let blendShapes = faceAnchor.blendShapes
-        
+
         if let jawOpen = blendShapes[.jawOpen]?.floatValue {
             // 调整小球的缩放倍数
             let scale = 1 + (jawOpen * maxScale)
-            
+
             face.children.compactMap { $0 as? ModelEntity }.forEach { eyeBall in
                 eyeBall.scale = SIMD3<Float>(repeating: scale)
             }
         }
-        
+
         // 获取眼球相对于头部的位置
         if let leftEye = face.children.first(where: { $0.name == "leftEye" }),
-           let rightEye = face.children.first(where: { $0.name == "rightEye" }) {
+           let rightEye = face.children.first(where: { $0.name == "rightEye" })
+        {
             let leftEyePosition = leftEye.position
             let rightEyePosition = rightEye.position
-            
+
             // 输出眼球相对于头部的位置
             print("Left Eye Relative Position:", leftEyePosition)
             print("Right Eye Relative Position:", rightEyePosition)
-            
+
             // 获取眼球的世界位置
             let leftEyeWorldPosition = face.convert(position: leftEyePosition, to: nil)
             let rightEyeWorldPosition = face.convert(position: rightEyePosition, to: nil)
-            
+
             // 输出眼球的世界位置
             print("Left Eye World Position:", leftEyeWorldPosition)
             print("Right Eye World Position:", rightEyeWorldPosition)
         }
-        
+
         // ...
     }
-
-
 }
 
 #if DEBUG
