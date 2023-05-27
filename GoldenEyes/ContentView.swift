@@ -5,39 +5,93 @@
 //  Created by Yang Xu on 2023/5/27.
 //
 
-import SwiftUI
+import ARKit
 import RealityKit
+import SwiftUI
 
-struct ContentView : View {
+struct ContentView: View {
+    @State var show = true
     var body: some View {
-        ARViewContainer().edgesIgnoringSafeArea(.all)
+        ZStack(alignment: .bottom) {
+            FullCode_ARViewContainer(show: $show).edgesIgnoringSafeArea(.all)
+            Button {
+                show.toggle()
+            } label: {
+                Text(show ? "Hide" : "Show").padding(.horizontal, 20)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(16)
+        }
     }
 }
 
-struct ARViewContainer: UIViewRepresentable {
-    
+struct FullCode_ARViewContainer: UIViewRepresentable {
+    @Binding var show: Bool
+
     func makeUIView(context: Context) -> ARView {
-        
         let arView = ARView(frame: .zero)
-        
-        // Load the "Box" scene from the "Experience" Reality File
-        let boxAnchor = try! Experience.loadBox()
-        
-        // Add the box anchor to the scene
-        arView.scene.anchors.append(boxAnchor)
-        
+        let arConfiguration = ARFaceTrackingConfiguration()
+        arView.session.run(arConfiguration, options: [.resetTracking, .removeExistingAnchors])
+        arView.session.delegate = context.coordinator
         return arView
-        
     }
-    
-    func updateUIView(_ uiView: ARView, context: Context) {}
-    
+
+    func updateUIView(_ uiView: ARView, context: Context) {
+        if show {
+            let arAnchor = try! Eyes.load_Eyes()
+            uiView.scene.anchors.append(arAnchor)
+            context.coordinator.face = arAnchor
+        } else {
+            context.coordinator.face = nil
+            uiView.scene.anchors.removeAll()
+        }
+    }
+
+    func makeCoordinator() -> FullCode_ARDelegateHandler {
+        FullCode_ARDelegateHandler(arViewContainer: self)
+    }
+}
+
+class FullCode_ARDelegateHandler: NSObject, ARSessionDelegate {
+    var arViewContainer: FullCode_ARViewContainer
+    var face: Eyes._Eyes!
+    init(arViewContainer: FullCode_ARViewContainer) {
+        self.arViewContainer = arViewContainer
+        super.init()
+    }
+
+    func session(_: ARSession,
+                 didUpdate anchors: [ARAnchor])
+    {
+        guard let face else { return }
+        var faceAnchor: ARFaceAnchor?
+        for anchor in anchors {
+            if let a = anchor as? ARFaceAnchor {
+                faceAnchor = a
+            }
+        }
+
+        let blendShapes = faceAnchor?.blendShapes
+        if let jawOpen = blendShapes?[.jawOpen]?.floatValue {
+            // control face.eyeL's scale by jawOpen
+            face.eyeL?.scale = SIMD3<Float>(1, 1, 1) * (0.3 + jawOpen / 2)
+            face.eyeR?.scale = SIMD3<Float>(1, 1, 1) * (0.3 + jawOpen / 2)
+        }
+    }
+
+    func session(_: ARSession, didRemove _: [ARAnchor]) {
+        print("didRemove")
+    }
+
+    func session(_: ARSession, didAdd _: [ARAnchor]) {
+        print("didAdd")
+    }
 }
 
 #if DEBUG
-struct ContentView_Previews : PreviewProvider {
-    static var previews: some View {
-        ContentView()
+    struct ContentView_Previews: PreviewProvider {
+        static var previews: some View {
+            ContentView()
+        }
     }
-}
 #endif
