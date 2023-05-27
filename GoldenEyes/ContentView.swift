@@ -70,6 +70,9 @@ class FullCode_ARDelegateHandler: NSObject, ARSessionDelegate {
                 faceAnchor = a
             }
         }
+        
+        print(face.eyeL?.position,face.eyeR?.position)
+        
 
         let blendShapes = faceAnchor?.blendShapes
         if let jawOpen = blendShapes?[.jawOpen]?.floatValue {

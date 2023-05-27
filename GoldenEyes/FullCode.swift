@@ -1,156 +1,137 @@
-//
-//  FullCode.swift
-//  GoldenEyes
-//
-//  Created by Yang Xu on 2023/5/27.
-//
-
 import ARKit
-import Foundation
 import RealityKit
 import SwiftUI
 
-struct FullCodeView: View {
-    @State var showAR = true
+struct ContentView: View {
+    @State var show = true
 
     var body: some View {
-        ZStack {
-            if showAR {
-                ARViewContainer()
+        ZStack(alignment: .bottom) {
+            FullCodeARViewContainer(show: $show).edgesIgnoringSafeArea(.all)
+            Button(action: {
+                show.toggle()
+            }) {
+                Text(show ? "Hide" : "Show")
+                    .padding(.horizontal, 20)
             }
-            Button(showAR ? "Hide AR" : "Show AR") {
-                showAR.toggle()
-            }.padding()
+            .buttonStyle(.borderedProminent)
+            .padding(16)
         }
     }
 }
 
-struct ARViewContainer: UIViewRepresentable {
+struct FullCodeARViewContainer: UIViewRepresentable {
+    @Binding var show: Bool
+
     func makeUIView(context: Context) -> ARView {
         let arView = ARView(frame: .zero)
-
-        // 设置人脸跟踪会话
-        let config = ARFaceTrackingConfiguration()
-        arView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
-
-        // 设置会话代理
+        let arConfiguration = ARFaceTrackingConfiguration()
+        arView.session.run(arConfiguration, options: [.resetTracking, .removeExistingAnchors])
         arView.session.delegate = context.coordinator
-        context.coordinator.arView = arView
-        context.coordinator.addEyes(to: arView)
         return arView
     }
 
-    func updateUIView(_: ARView, context _: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
+    func updateUIView(_ uiView: ARView, context: Context) {
+        if show {
+            let arAnchor = try! makeEyesAnchor()
+            uiView.scene.anchors.append(arAnchor)
+            context.coordinator.face = arAnchor
+        } else {
+            context.coordinator.face = nil
+            uiView.scene.anchors.removeAll()
+        }
     }
 
-    class Coordinator: NSObject, ARSessionDelegate {
-        var arView: ARView?
-        var faceAnchor: ARFaceAnchor?
-        var eyeL: Entity?
-        var eyeR: Entity?
+    func makeCoordinator() -> FullCodeARDelegateHandler {
+        FullCodeARDelegateHandler(arViewContainer: self)
+    }
 
-        func addEyes(to arView: ARView) {
-            // 创建左眼Entity
-            eyeL = Entity()
-            eyeL?.name = "Left Eye"
-            let scale: Float = 0.36 // 缩放因子
-            let radius: Float = 0.1 * scale // 根据缩放因子计算半径
+    func makeEyesAnchor() throws -> AnchorEntity {
+        let eyesAnchor = AnchorEntity()
 
-            eyeL?.components[ModelComponent.self] = ModelComponent(
-                mesh: .generateSphere(radius: radius),
-                materials: [SimpleMaterial(color: .yellow, isMetallic: false)]
-            )
-            eyeL?.transform.rotation = simd_quatf()
-            eyeL?.position = SIMD3<Float>(0.0305, 0.0497, 1)
-//            eyeL?.position = SIMD3<Float>(-0.0321, 0.0497, -0.03)
+        let eyeBallSize: Float = 0.02 // 小球的尺寸
 
-            // 创建右眼Entity
-            eyeR = Entity()
-            eyeR?.name = "Right Eye"
-            eyeR?.components[ModelComponent.self] = ModelComponent(
-                mesh: .generateSphere(radius: radius),
-                materials: [SimpleMaterial(color: .yellow, isMetallic: false)]
-            )
-            eyeR?.transform.rotation = simd_quatf()
-            eyeR?.position = SIMD3<Float>(0.002, 0.01, -0.03)
+        // 创建左眼小球并设置位置
+        let leftEyeBall = createEyeBall(scale: eyeBallSize)
+        leftEyeBall.position = SIMD3<Float>(0.030469913, 0.0497, -0.03) // 左眼位置
+        eyesAnchor.addChild(leftEyeBall)
 
-            let anchorEntity = AnchorEntity(world: .zero)
-            anchorEntity.addChild(eyeL!)
-            anchorEntity.addChild(eyeR!)
-            arView.scene.addAnchor(anchorEntity)
+        // 创建右眼小球并设置位置
+        let rightEyeBall = createEyeBall(scale: eyeBallSize)
+        rightEyeBall.position = SIMD3<Float>(-0.032096043, 0.04967857, -0.03) // 右眼位置
+        eyesAnchor.addChild(rightEyeBall)
 
-            // 为ARView添加点击手势
-            let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-            arView.addGestureRecognizer(tapGesture)
-        }
+        return eyesAnchor
+    }
 
-        func session(_ session: ARSession, didUpdate anchors: [ARAnchor]) {
-            for anchor in anchors {
-                if let faceAnchor = anchor as? ARFaceAnchor {
-                    if let leftEyeNode = eyeL,
-                       let rightEyeNode = eyeR
-                    {
-                        let leftEyeTransform = faceAnchor.leftEyeTransform
-                        let rightEyeTransform = faceAnchor.rightEyeTransform
-                        
-                        let leftEyePosition = simd_make_float3(leftEyeTransform.columns.3.x, leftEyeTransform.columns.3.y, leftEyeTransform.columns.3.z)
-                        let rightEyePosition = simd_make_float3(rightEyeTransform.columns.3.x, rightEyeTransform.columns.3.y, rightEyeTransform.columns.3.z)
-                        
-                        // 调整球体的位置
-                        let horizontalOffset: Float = 0.005 // 水平方向的偏移量
-                        let verticalOffset: Float = 0.01 // 垂直方向的偏移量
-                        let forwardOffset: Float = 0   // 向前移动的偏移量
-                        
-                        leftEyeNode.position = leftEyePosition + SIMD3<Float>(horizontalOffset, verticalOffset, forwardOffset)
-                        rightEyeNode.position = rightEyePosition + SIMD3<Float>(-horizontalOffset, verticalOffset, forwardOffset)
-                        
-                        print(leftEyePosition,rightEyePosition,"$$$")
-                        
-                        let blendShapes = faceAnchor.blendShapes
-                        if let jawOpen = blendShapes[.jawOpen]?.floatValue {
-                            // 根据下颚开合程度设置眼睛Entity大小
-                            leftEyeNode.scale = SIMD3<Float>(1, 1, 1) * (0.3 + jawOpen / 2)
-                            rightEyeNode.scale = SIMD3<Float>(1, 1, 1) * (0.3 + jawOpen / 2)
-                        }
-                        
-                        // 输出眼球位置
-                        print(leftEyeNode.position, rightEyeNode.position)
-                    }
-                }
-            }
-        }
-
-        @objc func handleTap(_ gestureRecognizer: UITapGestureRecognizer) {
-            guard let arView else { return }
-            let location = gestureRecognizer.location(in: arView)
-            if let entity = arView.entity(at: location) {
-                if entity == eyeL {
-                    // 左眼被点击的处理逻辑
-                    playSound()
-                } else if entity == eyeR {
-                    // 右眼被点击的处理逻辑
-                    playSound()
-                }
-            }
-        }
-
-        func playSound() {
-            // 创建音频文件的URL
-            print("play sound")
-            guard let soundURL = Bundle.main.url(forResource: "sound_file", withExtension: "mp3") else {
-                return
-            }
-
-            // 播放音频
-            do {
-                let audioPlayer = try AVAudioPlayer(contentsOf: soundURL)
-                audioPlayer.play()
-            } catch {
-                print("Failed to play sound: \(error)")
-            }
-        }
+    func createEyeBall(scale: Float) -> ModelEntity {
+        let eyeBall = ModelEntity(mesh: .generateSphere(radius: scale), materials: [SimpleMaterial(color: .yellow, isMetallic: true)])
+        return eyeBall
     }
 }
+
+class FullCodeARDelegateHandler: NSObject, ARSessionDelegate {
+    var arViewContainer: FullCodeARViewContainer
+    var face: AnchorEntity?
+    
+
+    init(arViewContainer: FullCodeARViewContainer) {
+        self.arViewContainer = arViewContainer
+        super.init()
+    }
+
+    func session(_: ARSession, didUpdate anchors: [ARAnchor]) {
+        guard let faceAnchor = anchors.first as? ARFaceAnchor else { return }
+
+        // 获取头部位置
+        let facePosition = SIMD3<Float>(faceAnchor.transform.columns.3.x, faceAnchor.transform.columns.3.y, faceAnchor.transform.columns.3.z)
+
+        if let faceEntity = face?.children.compactMap({ $0 as? ModelEntity }) {
+            let forwardVector = simd_normalize(faceAnchor.transform.columns.2)
+            let upwardVector = simd_normalize(faceAnchor.transform.columns.1)
+
+            let forwardOffset: Float = 0.05 // 向前偏移的量
+            let upwardOffset: Float = 0.02 // 向上偏移的量
+
+            let facePosition = SIMD3<Float>(faceAnchor.transform.columns.3.x, faceAnchor.transform.columns.3.y, faceAnchor.transform.columns.3.z)
+            let forwardOffsetVector = SIMD3<Float>(forwardVector.x, forwardVector.y, forwardVector.z) * forwardOffset
+            let upwardOffsetVector = SIMD3<Float>(upwardVector.x, upwardVector.y, upwardVector.z) * upwardOffset
+
+            let leftEyePosition = facePosition + forwardOffsetVector + upwardOffsetVector
+            let rightEyePosition = facePosition - forwardOffsetVector + upwardOffsetVector
+
+            faceEntity.first?.position = leftEyePosition
+            faceEntity.last?.position = rightEyePosition
+
+            print("Left Eye Position:", leftEyePosition)
+            print("Right Eye Position:", rightEyePosition)
+        }
+
+        let maxScale: Float = 2 // 小球的最大缩放倍数
+        // 获取张嘴程度
+        let blendShapes = faceAnchor.blendShapes
+        if let jawOpen = blendShapes[.jawOpen]?.floatValue {
+            // 调整小球的缩放倍数
+            let scale = 1 + (jawOpen * maxScale)
+            face?.children.compactMap { $0 as? ModelEntity }.forEach { eyeBall in
+                eyeBall.scale = SIMD3<Float>(repeating: scale)
+            }
+        }
+    }
+
+    func session(_: ARSession, didRemove _: [ARAnchor]) {
+        print("didRemove")
+    }
+
+    func session(_: ARSession, didAdd _: [ARAnchor]) {
+        print("didAdd")
+    }
+}
+
+#if DEBUG
+    struct ContentView_Previews: PreviewProvider {
+        static var previews: some View {
+            ContentView()
+        }
+    }
+#endif
