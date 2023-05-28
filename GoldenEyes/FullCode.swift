@@ -1,6 +1,8 @@
 import ARKit
+import AVFoundation
 import RealityKit
 import SwiftUI
+
 struct ContentView: View {
     @State var show = true
     var body: some View {
@@ -30,7 +32,7 @@ struct FullCodeARViewContainer: UIViewRepresentable {
 
     func updateUIView(_ uiView: ARView, context: Context) {
         if show {
-            let arAnchor = try! makeEyesAnchor()
+            let arAnchor = try! makeEyesAnchor(context: context)
             context.coordinator.face = arAnchor
             uiView.scene.anchors.append(arAnchor)
         } else {
@@ -43,7 +45,7 @@ struct FullCodeARViewContainer: UIViewRepresentable {
         FullCodeARDelegateHandler(arViewContainer: self)
     }
 
-    func makeEyesAnchor() throws -> AnchorEntity {
+    func makeEyesAnchor(context:Context) throws -> AnchorEntity {
         let eyesAnchor = AnchorEntity()
         let eyeBallSize: Float = 0.015 // 小球的尺寸
         // 创建左眼小球并设置位置
@@ -52,6 +54,7 @@ struct FullCodeARViewContainer: UIViewRepresentable {
         leftEyeBall.name = "leftEye"
         leftEyeBall.position = leftEyeOffset
         eyesAnchor.addChild(leftEyeBall)
+        
         // 创建右眼小球并设置位置
         let rightEyeBall = createEyeBall(scale: eyeBallSize)
         let rightEyeOffset = SIMD3<Float>(-0.03, 0.02, 0.05) // 右眼相对于头部的偏移量
@@ -73,6 +76,7 @@ class FullCodeARDelegateHandler: NSObject, ARSessionDelegate {
     init(arViewContainer: FullCodeARViewContainer) {
         self.arViewContainer = arViewContainer
         super.init()
+        
     }
 
     func session(_: ARSession, didUpdate anchors: [ARAnchor]) {
@@ -87,7 +91,7 @@ class FullCodeARDelegateHandler: NSObject, ARSessionDelegate {
         let faceOrientation = simd_quatf(faceAnchor.transform)
         face.position = facePosition
         face.orientation = faceOrientation
-        
+
         // 获取头部节点的旋转值
         let faceRotation = face.orientation
 
@@ -104,9 +108,6 @@ class FullCodeARDelegateHandler: NSObject, ARSessionDelegate {
             let eyeLocalRotation = simd_mul(parentRotation.inverse, faceRotation)
             rightEye.orientation = eyeLocalRotation
         }
-        
-
-        print("Face Position and Orientation:", facePosition, faceOrientation)
 
         let maxScale: Float = 1.6 // 小球的最大缩放倍数
 
@@ -121,28 +122,6 @@ class FullCodeARDelegateHandler: NSObject, ARSessionDelegate {
                 eyeBall.scale = SIMD3<Float>(repeating: scale)
             }
         }
-
-        // 获取眼球相对于头部的位置
-        if let leftEye = face.children.first(where: { $0.name == "leftEye" }),
-           let rightEye = face.children.first(where: { $0.name == "rightEye" })
-        {
-            let leftEyePosition = leftEye.position
-            let rightEyePosition = rightEye.position
-
-            // 输出眼球相对于头部的位置
-            print("Left Eye Relative Position:", leftEyePosition)
-            print("Right Eye Relative Position:", rightEyePosition)
-
-            // 获取眼球的世界位置
-            let leftEyeWorldPosition = face.convert(position: leftEyePosition, to: nil)
-            let rightEyeWorldPosition = face.convert(position: rightEyePosition, to: nil)
-
-            // 输出眼球的世界位置
-            print("Left Eye World Position:", leftEyeWorldPosition)
-            print("Right Eye World Position:", rightEyeWorldPosition)
-        }
-
-        // ...
     }
 }
 
