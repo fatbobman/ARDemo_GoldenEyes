@@ -3,7 +3,7 @@ import AVFoundation
 import RealityKit
 import SwiftUI
 
-struct ContentView: View {
+struct FullCodeDemo: View {
     @State var show = true
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -35,6 +35,9 @@ struct FullCodeARViewContainer: UIViewRepresentable {
             let arAnchor = try! makeEyesAnchor(context: context)
             context.coordinator.face = arAnchor
             uiView.scene.anchors.append(arAnchor)
+
+            let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(context.coordinator.handleTap(_:)))
+            uiView.addGestureRecognizer(tapGesture)
         } else {
             context.coordinator.face = nil
             uiView.scene.anchors.removeAll()
@@ -45,27 +48,43 @@ struct FullCodeARViewContainer: UIViewRepresentable {
         FullCodeARDelegateHandler(arViewContainer: self)
     }
 
-    func makeEyesAnchor(context:Context) throws -> AnchorEntity {
+    func makeEyesAnchor(context _: Context) throws -> AnchorEntity {
         let eyesAnchor = AnchorEntity()
         let eyeBallSize: Float = 0.015 // 小球的尺寸
+        let collisionBoxSize: Float = 0.03 // 碰撞盒的尺寸
+
         // 创建左眼小球并设置位置
         let leftEyeBall = createEyeBall(scale: eyeBallSize)
         let leftEyeOffset = SIMD3<Float>(0.03, 0.02, 0.05) // 左眼相对于头部的偏移量
         leftEyeBall.name = "leftEye"
         leftEyeBall.position = leftEyeOffset
+
+        // 为左眼小球添加碰撞盒
+        let leftEyeCollision = CollisionComponent(shapes: [ShapeResource.generateBox(size: [collisionBoxSize, collisionBoxSize, collisionBoxSize])])
+        leftEyeBall.components.set(leftEyeCollision)
+
         eyesAnchor.addChild(leftEyeBall)
-        
+
         // 创建右眼小球并设置位置
         let rightEyeBall = createEyeBall(scale: eyeBallSize)
         let rightEyeOffset = SIMD3<Float>(-0.03, 0.02, 0.05) // 右眼相对于头部的偏移量
         rightEyeBall.name = "rightEye"
         rightEyeBall.position = rightEyeOffset
+
+        // 为右眼小球添加碰撞盒
+        let rightEyeCollision = CollisionComponent(shapes: [ShapeResource.generateBox(size: [collisionBoxSize, collisionBoxSize, collisionBoxSize])])
+        rightEyeBall.components.set(rightEyeCollision)
+
         eyesAnchor.addChild(rightEyeBall)
+
         return eyesAnchor
     }
 
     func createEyeBall(scale: Float) -> ModelEntity {
-        let eyeBall = ModelEntity(mesh: .generateSphere(radius: scale), materials: [SimpleMaterial(color: .yellow, isMetallic: true)])
+        let eyeBall = ModelEntity(
+            mesh: .generateSphere(radius: scale),
+            materials: [SimpleMaterial(color: .yellow, isMetallic: true)]
+        )
         return eyeBall
     }
 }
@@ -73,10 +92,10 @@ struct FullCodeARViewContainer: UIViewRepresentable {
 class FullCodeARDelegateHandler: NSObject, ARSessionDelegate {
     var arViewContainer: FullCodeARViewContainer
     var face: AnchorEntity?
+    var player: AVAudioPlayer?
     init(arViewContainer: FullCodeARViewContainer) {
         self.arViewContainer = arViewContainer
         super.init()
-        
     }
 
     func session(_: ARSession, didUpdate anchors: [ARAnchor]) {
@@ -123,12 +142,27 @@ class FullCodeARDelegateHandler: NSObject, ARSessionDelegate {
             }
         }
     }
-}
 
-#if DEBUG
-    struct ContentView_Previews: PreviewProvider {
-        static var previews: some View {
-            ContentView()
+    @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+        guard let arView = gesture.view as? ARView else { return }
+        let touchLocation = gesture.location(in: arView)
+
+        if let _ = arView.entity(at: touchLocation) {
+            playSound()
         }
     }
-#endif
+
+    func playSound() {
+        if player == nil {
+            let fileName = "mixkit-classic-click.wav"
+            guard let url = Bundle.main.url(forResource: fileName, withExtension: nil) else {
+                print("Sound file '\(fileName)' not found.")
+                return
+            }
+            player = try! AVAudioPlayer(contentsOf: url)
+            player?.prepareToPlay()
+        }
+
+        player?.play()
+    }
+}
